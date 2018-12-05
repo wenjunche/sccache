@@ -208,6 +208,7 @@ ArgData!{
     TooHardPath(PathBuf),
     PreprocessorArgument(OsString),
     PreprocessorArgumentPath(PathBuf),
+    CompilerOnlyArgument(OsString),
     DoCompilation,
     ShowIncludes,
     Output(PathBuf),
@@ -220,6 +221,7 @@ ArgData!{
 use self::ArgData::*;
 
 counted_array!(static ARGS: [ArgInfo<ArgData>; _] = [
+    take_arg!("-Brepro", OsString, Concatenated, CompilerOnlyArgument),
     take_arg!("-D", OsString, Concatenated, PreprocessorArgument),
     take_arg!("-FA", OsString, Concatenated, TooHard),
     take_arg!("-FI", PathBuf, CanBeSeparated, PreprocessorArgumentPath),
@@ -250,6 +252,7 @@ pub fn parse_arguments(arguments: &[OsString], cwd: &Path, is_clang: bool) -> Co
     let mut input_arg = None;
     let mut common_args = vec!();
     let mut preprocessor_args = vec!();
+    let mut compiler_only_args = vec!();
     let mut extra_hash_files = vec!();
     let mut compilation = false;
     let mut debug_info = false;
@@ -293,7 +296,8 @@ pub fn parse_arguments(arguments: &[OsString], cwd: &Path, is_clang: bool) -> Co
             Some(ProgramDatabase(p)) => pdb = Some(p.clone()),
             Some(DebugInfo) => debug_info = true,
             Some(PreprocessorArgument(_)) |
-            Some(PreprocessorArgumentPath(_)) => {}
+            Some(PreprocessorArgumentPath(_)) |
+            Some(CompilerOnlyArgument(_)) => {}
             Some(XClang(s)) => xclangs.push(s.clone()),
             None => {
                 match arg {
@@ -313,6 +317,10 @@ pub fn parse_arguments(arguments: &[OsString], cwd: &Path, is_clang: bool) -> Co
             Some(PreprocessorArgument(_)) |
             Some(PreprocessorArgumentPath(_)) => {
                 preprocessor_args.extend(arg.normalize(NormalizedDisposition::Concatenated).iter_os_strings())
+            },
+            Some(CompilerOnlyArgument(_)) => {
+                debug!("parse_arguments: compiler only {:?}", arg);
+                compiler_only_args.extend(arg.normalize(NormalizedDisposition::Concatenated).iter_os_strings())
             },
             Some(ProgramDatabase(_)) |
             Some(DebugInfo) => {
@@ -361,6 +369,7 @@ pub fn parse_arguments(arguments: &[OsString], cwd: &Path, is_clang: bool) -> Co
             Some(PreprocessorArgumentPath(_)) |
             Some(DepTarget(_)) |
             Some(NeedDepTarget) => Some(&mut preprocessor_args),
+            Some(CompilerOnlyArgument(_)) => Some(&mut compiler_only_args),
         };
         if let Some(args) = args {
             // Normalize attributes such as "-I foo", "-D FOO=bar", as
@@ -421,6 +430,7 @@ pub fn parse_arguments(arguments: &[OsString], cwd: &Path, is_clang: bool) -> Co
         depfile: depfile,
         outputs: outputs,
         preprocessor_args: preprocessor_args,
+        compiler_only_args: compiler_only_args,
         common_args: common_args,
         extra_hash_files: extra_hash_files,
         msvc_show_includes: show_includes,
@@ -493,6 +503,7 @@ pub fn preprocess<T>(creator: &T,
     }
 
     if log_enabled!(Debug) {
+        debug!("preprocess preprocessor_args: {:?}", parsed_args.preprocessor_args);
         debug!("preprocess: {:?}", cmd);
     }
 
@@ -587,6 +598,7 @@ fn generate_compile_commands(path_transformer: &mut dist::PathTransformer,
     ];
     arguments.extend(parsed_args.preprocessor_args.clone());
     arguments.extend(parsed_args.common_args.clone());
+    arguments.extend(parsed_args.compiler_only_args.clone());
 
     let command = CompileCommand {
         executable: executable.to_owned(),
@@ -623,6 +635,8 @@ fn generate_compile_commands(path_transformer: &mut dist::PathTransformer,
         })
     })();
 
+    debug!("compile command: {:?}", command);
+    debug!("compile dist_command: {:?}", dist_command);
     Ok((command, dist_command, cacheable))
 }
 

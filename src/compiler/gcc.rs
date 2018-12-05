@@ -81,6 +81,7 @@ ArgData!{ pub
     PreprocessorArgumentFlag,
     PreprocessorArgument(OsString),
     PreprocessorArgumentPath(PathBuf),
+    CompilerOnlyArgument(OsString),
     DoCompilation,
     Output(PathBuf),
     NeedDepTarget,
@@ -110,6 +111,7 @@ counted_array!(pub static ARGS: [ArgInfo<ArgData>; _] = [
     take_arg!("--sysroot", PathBuf, Separated, PassThroughPath),
     take_arg!("-A", OsString, Separated, PassThrough),
     take_arg!("-B", PathBuf, CanBeSeparated, PassThroughPath),
+    take_arg!("-Brepro", OsString, Concatenated, CompilerOnlyArgument),
     take_arg!("-D", OsString, CanBeSeparated, PreprocessorArgument),
     flag!("-E", TooHardFlag),
     take_arg!("-F", PathBuf, CanBeSeparated, PreprocessorArgumentPath),
@@ -191,6 +193,7 @@ where
     let mut dep_target = None;
     let mut common_args = vec!();
     let mut preprocessor_args = vec!();
+    let compiler_only_args = vec!();
     let mut extra_hash_files = vec!();
     let mut compilation = false;
     let mut multiple_input = false;
@@ -249,6 +252,7 @@ where
             Some(PreprocessorArgumentFlag) |
             Some(PreprocessorArgument(_)) |
             Some(PreprocessorArgumentPath(_)) |
+            Some(CompilerOnlyArgument(_)) |
             Some(PassThrough(_)) |
             Some(PassThroughPath(_)) => {}
             Some(Language(lang)) => {
@@ -286,6 +290,7 @@ where
             Some(PreprocessorArgument(_)) |
             Some(PreprocessorArgumentPath(_)) |
             Some(NeedDepTarget) => Some(&mut preprocessor_args),
+            Some(CompilerOnlyArgument(_)) => None,
             Some(DoCompilation) |
             Some(Language(_)) |
             Some(Output(_)) |
@@ -349,6 +354,7 @@ where
             Some(PreprocessorArgumentPath(_)) |
             Some(DepTarget(_)) |
             Some(NeedDepTarget) => Some(&mut preprocessor_args),
+            Some(CompilerOnlyArgument(_)) => None,
         };
 
         if let Some(args) = args {
@@ -413,6 +419,7 @@ where
         depfile: None,
         outputs: outputs,
         preprocessor_args: preprocessor_args,
+        compiler_only_args: compiler_only_args,
         common_args: common_args,
         extra_hash_files: extra_hash_files,
         msvc_show_includes: false,
