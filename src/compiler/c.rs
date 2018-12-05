@@ -83,6 +83,8 @@ pub struct ParsedArguments {
     pub preprocessor_args: Vec<OsString>,
     /// Commandline arguments for the preprocessor or the compiler.
     pub common_args: Vec<OsString>,
+    /// Commandline arguments for the compiler only.
+    pub compiler_only_args: Vec<OsString>,
     /// Extra files that need to have their contents hashed.
     pub extra_hash_files: Vec<PathBuf>,
     /// Whether or not the `-showIncludes` argument is passed on MSVC
