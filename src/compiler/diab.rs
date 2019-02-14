@@ -258,6 +258,7 @@ where
         outputs,
         preprocessor_args,
         common_args,
+        compiler_only_args: vec![],
         extra_hash_files: vec![],
         msvc_show_includes: false,
         profile_generate: false,
