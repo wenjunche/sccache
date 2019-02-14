@@ -16,6 +16,7 @@
 pub mod azure;
 pub mod cache;
 pub mod disk;
+pub mod two_tier_disk;
 #[cfg(feature = "memcached")]
 pub mod memcached;
 #[cfg(feature = "redis")]

@@ -15,6 +15,7 @@
 #[cfg(feature = "azure")]
 use cache::azure::AzureBlobCache;
 use cache::disk::DiskCache;
+use cache::two_tier_disk::TwoTierDiskCache;
 #[cfg(feature = "gcs")]
 use cache::gcs::{self, GCSCache, GCSCredentialProvider, RWMode};
 #[cfg(feature = "memcached")]
@@ -27,6 +28,7 @@ use config::{self, CacheType, Config};
 use futures_cpupool::CpuPool;
 #[cfg(feature = "gcs")]
 use serde_json;
+use std::env;
 use std::fmt;
 #[cfg(feature = "gcs")]
 use std::fs::File;
@@ -92,6 +94,19 @@ impl CacheRead {
         io::copy(&mut file, to)?;
         Ok(file.unix_mode())
     }
+
+    pub fn to_write(&mut self) -> CacheWrite {
+        let mut entry = CacheWrite::new();
+        for i in 0..self.zip.len() {
+            let mut file = self.zip.by_index(i).unwrap();
+            let file_name = String::from(file.name());
+            let mode = file.unix_mode();
+            entry.put_object(&file_name, &mut file, mode)
+               .expect("failed to put object in zip");
+        }
+        entry
+    }
+
 }
 
 /// Data to be stored in the compiler cache.
@@ -163,8 +178,20 @@ pub trait Storage {
     fn max_size(&self) -> SFuture<Option<u64>>;
 }
 
-/// Get a suitable `Storage` implementation from configuration.
 pub fn storage_from_config(config: &Config, pool: &CpuPool) -> Arc<Storage> {
+    let base = base_storage_from_config(config, pool);
+    if let Ok(_use_two_tier) = env::var("SCCACHE_TWO_TIER") {
+        trace!("Using two tier cache");
+        let (dir, size) = (&config.fallback_cache.dir, config.fallback_cache.size);
+        trace!("Using DiskCache({:?}, {})", dir, size);
+        let disk_cache = Arc::new(DiskCache::new(&dir, size, pool));
+        return Arc::new(TwoTierDiskCache::new(base, disk_cache));
+    }
+    base
+}
+
+/// Get a suitable `Storage` implementation from configuration.
+pub fn base_storage_from_config(config: &Config, pool: &CpuPool) -> Arc<Storage> {
     for cache_type in config.caches.iter() {
         match *cache_type {
             CacheType::Azure(config::AzureCacheConfig) => {
